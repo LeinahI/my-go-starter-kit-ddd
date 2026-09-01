@@ -1,0 +1,11 @@
+demo_products:
+  - name: Starter Kit
+    slug: starter-kit
+    description: Example product from seeder
+    price: "19.99"
+    stock: 100
+  - name: Pro Bundle
+    slug: pro-bundle
+    description: Second seeded product
+    price: "49.99"
+    stock: 25

@@ -1,0 +1,83 @@
+openapi: 3.1.0
+info:
+  title: ws API
+  version: 0.1.0
+  description: Backend API contract for core and site frontends.
+servers:
+  - url: http://localhost:8080
+paths:
+  /up:
+    get:
+      summary: Health check
+      responses:
+        "200":
+          description: Service is healthy
+  /api/v1/products:
+    get:
+      summary: List products
+      parameters:
+        - in: query
+          name: q
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Product list
+    post:
+      summary: Create product
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProductRequest"
+      responses:
+        "201":
+          description: Created
+  /api/v1/products/{id}:
+    get:
+      summary: Get product by ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Product
+        "404":
+          description: Not found
+components:
+  schemas:
+    Product:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+        price:
+          type: string
+        stock:
+          type: integer
+    CreateProductRequest:
+      type: object
+      required: [name, slug, price, stock]
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+        price:
+          type: string
+        stock:
+          type: integer
