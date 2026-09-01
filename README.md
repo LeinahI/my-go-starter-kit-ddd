@@ -12,6 +12,63 @@ Frontends live in separate repos and consume this API over HTTP. See [`api/opena
 
 ---
 
+## Why this starter exists
+
+This is not another folder-layout reference repo. It is a **working backend template** built for teams — especially developers arriving from **Laravel** — who need a **multi-repository** setup (`ws`, `core`, `site`) without dragging PHP-era habits into Go.
+
+Laravel gives you conventions out of the box: `artisan`, Eloquent, migrations, controllers, service providers. Go gives you something different: a small language, a large standard library, and the freedom to structure code yourself. That freedom is powerful, but it is also where teams get lost. They either copy Java-style layering, reach for the first framework that feels familiar, or end up with a `handlers/` folder that becomes unmaintainable after the tenth domain.
+
+This starter answers a specific question: **how do you get Laravel-like clarity (migrations, seeders, clear boundaries) while writing idiomatic Go?**
+
+The answer here is **Domain-Driven Design (DDD) at the tactical level** — aggregates, value objects, repository interfaces in the domain, use cases in application, Postgres implementations in infrastructure — combined with **Go community layout conventions** (`cmd/`, `internal/`, thin `main.go`). Not Clean Architecture ceremony for its own sake. Not an enterprise framework. Just enough structure that a new teammate can open `internal/domain/product/` and understand where business rules live.
+
+DDD is chosen because it maps naturally to how Laravel developers already think — **models with behavior**, policies, domain events, repositories — while respecting Go's preference for **explicit packages over magic**. Your `Product` aggregate enforces invariants in code, not in a global `Service` class. Your repository interface lives next to the aggregate it serves, not in a generic `repositories/` junk drawer. That is DDD adapted to Go, not DDD copied from Java.
+
+---
+
+## Why standard library first — and why we avoid frameworks and ORMs
+
+Go's culture is often summarized in one line from the community: **before you add a dependency, ask what the standard library cannot do that you actually need.**
+
+That idea shows up repeatedly across the ecosystem — from long-running discussions on r/golang, to Venkatesh Thallam's observation that Go's standard packages are performant enough to ship production services, and that the typical advice from experienced Go developers is still to **start with stdlib**. Daniel Valev puts it plainly: frameworks are not banned — but adding them should be a **conscious decision**, not muscle memory on day one. See [References](#references) for the articles that shaped this approach.
+
+This starter follows that philosophy deliberately.
+
+### HTTP without a web framework
+
+For years, the main argument for Gin, Echo, or Chi was routing ergonomics — especially path parameters and method-based routes. **Go 1.22+ changed that.** The standard `net/http.ServeMux` now supports patterns like `GET /api/v1/products/{id}` and `r.PathValue("id")` natively. As Valev notes, for most internal APIs, microservices, and backends serving separate frontends, **that is sufficient**.
+
+This template uses **`net/http` only** — no Gin, no Echo, no Fiber. Middleware is plain `func(http.Handler) http.Handler`. Handlers are plain functions. You can read the entire request path from router to database without learning a framework's conventions. When your team outgrows stdlib routing, you can adopt a router library with a clear reason — not because the template assumed you needed one on clone.
+
+### Data access without an ORM
+
+ORMs like GORM promise less boilerplate. They also bring implicit queries, magic associations, migration drift, and debugging sessions spent reading generated SQL. Thallam's benchmarks in the HackerNoon article show that alternatives can be faster in isolated tests — but he concludes that **speed alone should not drive the decision**. Maintainability, testability, and long-term dependency health matter more.
+
+Go's answer is `database/sql`: explicit, boring, and well understood. You write SQL. You scan rows into structs. You control exactly what hits the database. This starter uses **`database/sql` with the `pgx` driver** — a driver, not an ORM — and **goose** for versioned SQL migrations. That mirrors Laravel's migration files more honestly than an ORM schema dumper ever will: your schema lives in `internal/database/migrations/` as plain SQL, reviewable in pull requests, identical in every environment.
+
+Repository interfaces sit in the **domain**; Postgres code sits in **infrastructure**. That is DDD's persistence boundary — not GORM's `AutoMigrate`.
+
+### What we still add (and why)
+
+Stdlib-first does not mean zero dependencies. It means **each dependency earns its place**:
+
+| Dependency | Role | Why not stdlib? |
+|---|---|---|
+| `github.com/jackc/pgx/v5` | Postgres driver | `database/sql` needs a driver; pgx is the community standard |
+| `github.com/pressly/goose/v3` | SQL migrations | No migration tool in stdlib; SQL-first matches Laravel's workflow |
+| `github.com/swaggo/http-swagger` | API docs UI | OpenAPI generation; contract for `core` and `site` teams |
+| `github.com/joho/godotenv` | Local `.env` loading | DX for development; production uses real env vars |
+
+No framework wraps your application. No ORM hides your queries. The startup case for relying on Go's standard library — simplicity, readability, composability, smaller attack surface — applies directly here: fewer moving parts, faster builds, less upgrade churn, and code a Laravel migrant can follow without learning GORM tags *and* Go *and* a framework's idioms at the same time.
+
+### The trade-off, stated honestly
+
+Frameworks and ORMs are not wrong. Large teams with complex routing, heavy middleware chains, or rapid CRUD prototyping may reach for Gin or GORM and ship faster on day one. This starter optimizes for a different outcome: **a codebase that is still understandable on day three hundred**, when the original author is on vacation and a bug is in the order-placement flow.
+
+If you cannot explain in one sentence why a third-party package is needed, pause — that is the stdlib-first rule this repo is built on.
+
+---
+
 ## Initialize
 
 Use this when cloning the template for a new project.
@@ -241,6 +298,15 @@ Full rationale: [`docs/solution.md`](docs/solution.md)
 
 ## References
 
+### Stdlib-first philosophy
+
+- [I Stopped Reaching for Go Frameworks. The Standard Library Was There All Along](https://towardsdev.com/i-stopped-reaching-for-go-frameworks-the-standard-library-was-there-all-along-f4566b33ed12) — Daniel Valev (Towards Dev)
+- [Why Startups Should Rely on Go's Standard Library (and Not Third-Party Bloat)](https://medium.com/@kanishks772/why-startups-should-rely-on-gos-standard-library-and-not-third-party-bloat-bad601a0fd92) — The Latency Gambler (Medium)
+- [The Myth about Golang Frameworks and External Libraries](https://medium.com/hackernoon/the-myth-about-golang-frameworks-and-external-libraries-93cb4b7da50f) — Venkatesh Thallam (HackerNoon)
+- [Why do Go users avoid frameworks?](https://www.reddit.com/r/golang/comments/1gs1cxq/why_do_go_users_avoid_frameworks/) — r/golang discussion
+
+### Project docs
+
 - [docs/solution.md](docs/solution.md) — structure decisions
 - [docs/medium.md](docs/medium.md) — layered intro
-- [Organizing a Go module](https://go.dev/doc/modules/layout)
+- [Organizing a Go module](https://go.dev/doc/modules/layout) — official Go guidance
