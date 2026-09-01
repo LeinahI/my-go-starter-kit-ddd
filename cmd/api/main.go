@@ -1,3 +1,13 @@
+// ws API
+//
+//	@title			ws API
+//	@version		1.0
+//	@description	Backend API for core and site frontends.
+//
+//	@host		localhost:8080
+//	@BasePath	/
+//
+//	@schemes	http
 package main
 
 import (
@@ -8,6 +18,8 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	_ "github.com/yourorg/ws/docs" // swag-generated OpenAPI docs
 
 	"github.com/yourorg/ws/internal/config"
 	"github.com/yourorg/ws/internal/database"
@@ -36,6 +48,9 @@ func main() {
 
 	go func() {
 		log.Printf("listening on %s", cfg.Addr())
+		if cfg.IsDevelopment() {
+			log.Printf("swagger UI: http://%s/swagger/index.html", cfg.Addr())
+		}
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("server error: %v", err)
 		}

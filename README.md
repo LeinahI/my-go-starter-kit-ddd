@@ -131,7 +131,23 @@ curl http://localhost:8080/api/v1/products
 
 Expected: health returns `{"data":{"status":"ok"}}`; products returns the seeded list.
 
-### 8. Run tests
+### 9. Swagger UI (development)
+
+When `APP_ENV=development`, open:
+
+**http://localhost:8080/swagger/index.html**
+
+Interactive API docs are generated from handler comments via [swaggo/swag](https://github.com/swaggo/swag) and served with [swaggo/http-swagger](https://github.com/swaggo/http-swagger).
+
+Regenerate after changing handler annotations:
+
+```bash
+make swagger
+```
+
+Generated files live in `docs/` (`docs.go`, `swagger.json`, `swagger.yaml`). Commit them so `go build` works without installing the `swag` CLI.
+
+### 10. Run tests
 
 ```bash
 make test
@@ -154,6 +170,8 @@ make test
 | New migration file | `make migrate-create name=add_users_table` |
 | Seed only | `make seed` |
 | Start / stop Docker DB | `make docker-db-up` / `make docker-db-down` |
+| Regenerate Swagger docs | `make swagger` |
+| Swagger UI (dev only) | http://localhost:8080/swagger/index.html |
 
 Migration files are created under `internal/database/migrations/`.
 
@@ -170,10 +188,10 @@ internal/
   transport/http/           handlers, middleware, router
   database/    connection, migrations, seeders
   config/      env loading
-api/           OpenAPI contract for core + site
+api/           OpenAPI contract for core + site (hand-maintained)
 configs/       committed config templates (e.g. seeder.yaml)
 deployments/   Docker, compose
-docs/          architecture notes
+docs/          swag-generated Swagger + architecture notes
 ```
 
 Full rationale: [`docs/solution.md`](docs/solution.md)
@@ -216,8 +234,8 @@ Full rationale: [`docs/solution.md`](docs/solution.md)
 **`migrate up` fails on existing tables**
 - Use `make migrate-status` to inspect state, or `make migrate-fresh-seed` on a dev machine only.
 
-**Module import errors after rename**
-- Ensure `go.mod` and all `import` paths use the same module path, then run `go mod tidy`.
+**`swagger: command not found`**
+- Install the CLI: `go install github.com/swaggo/swag/cmd/swag@latest`, then run `make swagger`.
 
 ---
 

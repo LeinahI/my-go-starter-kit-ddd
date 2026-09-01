@@ -42,6 +42,10 @@ func (c *Config) Addr() string {
 	return c.HTTPHost + ":" + c.HTTPPort
 }
 
+func (c *Config) IsDevelopment() bool {
+	return c.AppEnv == "development"
+}
+
 func (c *Config) IsAllowedOrigin(origin string) bool {
 	for _, allowed := range c.CORSAllowedOrigins {
 		if allowed == "*" || allowed == origin {

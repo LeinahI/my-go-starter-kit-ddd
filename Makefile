@@ -1,6 +1,6 @@
 DATABASE_URL ?= postgres://postgres:root@127.0.0.1:5433/ws?sslmode=disable
 
-.PHONY: run-api test build migrate-up migrate-down migrate-fresh migrate-fresh-seed migrate-rollback migrate-status migrate-create seed docker-db-up docker-db-down
+.PHONY: run-api test build swagger migrate-up migrate-down migrate-fresh migrate-fresh-seed migrate-rollback migrate-status migrate-create seed docker-db-up docker-db-down
 
 run-api:
 	go run ./cmd/api
@@ -10,6 +10,9 @@ test:
 
 build:
 	go build -o bin/api ./cmd/api
+
+swagger:
+	swag init -g cmd/api/main.go --parseInternal --output docs
 
 migrate-up:
 	DATABASE_URL="$(DATABASE_URL)" go run ./cmd/migrate up

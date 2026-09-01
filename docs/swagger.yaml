@@ -1,0 +1,174 @@
+basePath: /
+definitions:
+  http.SwaggerCreateProductRequest:
+    properties:
+      description:
+        example: Example product
+        type: string
+      name:
+        example: Starter Kit
+        type: string
+      price:
+        example: "19.99"
+        type: string
+      slug:
+        example: starter-kit
+        type: string
+      stock:
+        example: 10
+        type: integer
+    type: object
+  http.SwaggerErrorEnvelope:
+    properties:
+      error:
+        example: not found
+        type: string
+    type: object
+  http.SwaggerHealth:
+    properties:
+      status:
+        example: ok
+        type: string
+    type: object
+  http.SwaggerHealthEnvelope:
+    properties:
+      data:
+        $ref: '#/definitions/http.SwaggerHealth'
+    type: object
+  http.SwaggerProduct:
+    properties:
+      description:
+        example: Example product
+        type: string
+      id:
+        example: 550e8400-e29b-41d4-a716-446655440000
+        type: string
+      name:
+        example: Starter Kit
+        type: string
+      price:
+        example: "19.99"
+        type: string
+      slug:
+        example: starter-kit
+        type: string
+      stock:
+        example: 10
+        type: integer
+    type: object
+  http.SwaggerProductEnvelope:
+    properties:
+      data:
+        $ref: '#/definitions/http.SwaggerProduct'
+    type: object
+  http.SwaggerProductListEnvelope:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/http.SwaggerProduct'
+        type: array
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: Backend API for core and site frontends.
+  title: ws API
+  version: "1.0"
+paths:
+  /api/v1/products:
+    get:
+      description: Returns a paginated list of products. Optional search via query
+        parameter.
+      parameters:
+      - description: Search by name or slug
+        in: query
+        name: q
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/http.SwaggerProductListEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/http.SwaggerErrorEnvelope'
+      summary: List products
+      tags:
+      - products
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Product payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/http.SwaggerCreateProductRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/http.SwaggerProductEnvelope'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/http.SwaggerErrorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/http.SwaggerErrorEnvelope'
+      summary: Create product
+      tags:
+      - products
+  /api/v1/products/{id}:
+    get:
+      parameters:
+      - description: Product UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/http.SwaggerProductEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/http.SwaggerErrorEnvelope'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/http.SwaggerErrorEnvelope'
+      summary: Get product by ID
+      tags:
+      - products
+  /up:
+    get:
+      description: Returns OK when the API and database are reachable.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/http.SwaggerHealthEnvelope'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/http.SwaggerErrorEnvelope'
+      summary: Health check
+      tags:
+      - health
+schemes:
+- http
+swagger: "2.0"

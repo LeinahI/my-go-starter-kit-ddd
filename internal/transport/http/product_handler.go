@@ -1,7 +1,6 @@
 package http
 
 import (
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -36,6 +35,16 @@ type createProductRequest struct {
 	Stock       int    `json:"stock"`
 }
 
+// List godoc
+//
+//	@Summary		List products
+//	@Description	Returns a paginated list of products. Optional search via query parameter.
+//	@Tags			products
+//	@Produce		json
+//	@Param			q	query		string	false	"Search by name or slug"
+//	@Success		200	{object}	SwaggerProductListEnvelope
+//	@Failure		500	{object}	SwaggerErrorEnvelope
+//	@Router			/api/v1/products [get]
 func (h *ProductHandler) List(w http.ResponseWriter, r *http.Request) {
 	items, err := h.svc.List(r.Context(), product.ListFilter{
 		Query: r.URL.Query().Get("q"),
@@ -53,6 +62,16 @@ func (h *ProductHandler) List(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, out)
 }
 
+// Get godoc
+//
+//	@Summary		Get product by ID
+//	@Tags			products
+//	@Produce		json
+//	@Param			id	path		string	true	"Product UUID"
+//	@Success		200	{object}	SwaggerProductEnvelope
+//	@Failure		404	{object}	SwaggerErrorEnvelope
+//	@Failure		500	{object}	SwaggerErrorEnvelope
+//	@Router			/api/v1/products/{id} [get]
 func (h *ProductHandler) Get(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	p, err := h.svc.GetByID(r.Context(), id)
@@ -63,6 +82,17 @@ func (h *ProductHandler) Get(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, toProductResponse(p))
 }
 
+// Create godoc
+//
+//	@Summary		Create product
+//	@Tags			products
+//	@Accept			json
+//	@Produce		json
+//	@Param			body	body		SwaggerCreateProductRequest	true	"Product payload"
+//	@Success		201	{object}	SwaggerProductEnvelope
+//	@Failure		400	{object}	SwaggerErrorEnvelope
+//	@Failure		500	{object}	SwaggerErrorEnvelope
+//	@Router			/api/v1/products [post]
 func (h *ProductHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var req createProductRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -106,15 +136,5 @@ func writeProductError(w http.ResponseWriter, err error) {
 		response.Error(w, http.StatusBadRequest, err.Error())
 	default:
 		response.Error(w, http.StatusInternalServerError, "internal server error")
-	}
-}
-
-func Health(db *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if err := db.PingContext(r.Context()); err != nil {
-			response.Error(w, http.StatusServiceUnavailable, "database unavailable")
-			return
-		}
-		response.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	}
 }

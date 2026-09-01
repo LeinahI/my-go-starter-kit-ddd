@@ -1,0 +1,260 @@
+{
+    "schemes": [
+        "http"
+    ],
+    "swagger": "2.0",
+    "info": {
+        "description": "Backend API for core and site frontends.",
+        "title": "ws API",
+        "contact": {},
+        "version": "1.0"
+    },
+    "host": "localhost:8080",
+    "basePath": "/",
+    "paths": {
+        "/api/v1/products": {
+            "get": {
+                "description": "Returns a paginated list of products. Optional search via query parameter.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "products"
+                ],
+                "summary": "List products",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Search by name or slug",
+                        "name": "q",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/http.SwaggerProductListEnvelope"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/http.SwaggerErrorEnvelope"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "products"
+                ],
+                "summary": "Create product",
+                "parameters": [
+                    {
+                        "description": "Product payload",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/http.SwaggerCreateProductRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/http.SwaggerProductEnvelope"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/http.SwaggerErrorEnvelope"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/http.SwaggerErrorEnvelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/products/{id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "products"
+                ],
+                "summary": "Get product by ID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Product UUID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/http.SwaggerProductEnvelope"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/http.SwaggerErrorEnvelope"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/http.SwaggerErrorEnvelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/up": {
+            "get": {
+                "description": "Returns OK when the API and database are reachable.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "health"
+                ],
+                "summary": "Health check",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/http.SwaggerHealthEnvelope"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/http.SwaggerErrorEnvelope"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "http.SwaggerCreateProductRequest": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string",
+                    "example": "Example product"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "Starter Kit"
+                },
+                "price": {
+                    "type": "string",
+                    "example": "19.99"
+                },
+                "slug": {
+                    "type": "string",
+                    "example": "starter-kit"
+                },
+                "stock": {
+                    "type": "integer",
+                    "example": 10
+                }
+            }
+        },
+        "http.SwaggerErrorEnvelope": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string",
+                    "example": "not found"
+                }
+            }
+        },
+        "http.SwaggerHealth": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string",
+                    "example": "ok"
+                }
+            }
+        },
+        "http.SwaggerHealthEnvelope": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/http.SwaggerHealth"
+                }
+            }
+        },
+        "http.SwaggerProduct": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string",
+                    "example": "Example product"
+                },
+                "id": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "Starter Kit"
+                },
+                "price": {
+                    "type": "string",
+                    "example": "19.99"
+                },
+                "slug": {
+                    "type": "string",
+                    "example": "starter-kit"
+                },
+                "stock": {
+                    "type": "integer",
+                    "example": 10
+                }
+            }
+        },
+        "http.SwaggerProductEnvelope": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/http.SwaggerProduct"
+                }
+            }
+        },
+        "http.SwaggerProductListEnvelope": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/http.SwaggerProduct"
+                    }
+                }
+            }
+        }
+    }
+}
