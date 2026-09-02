@@ -20,7 +20,7 @@ Laravel gives you conventions out of the box: `artisan`, Eloquent, migrations, c
 
 This starter answers a specific question: **how do you get Laravel-like clarity (migrations, seeders, clear boundaries) while writing idiomatic Go?**
 
-The answer here is **Domain-Driven Design (DDD) at the tactical level** — aggregates, value objects, repository interfaces in the domain, use cases in application, Postgres implementations in infrastructure — combined with **Go community layout conventions** (`cmd/`, `internal/`, thin `main.go`). Not Clean Architecture ceremony for its own sake. Not an enterprise framework. Just enough structure that a new teammate can open `internal/domain/product/` and understand where business rules live.
+The answer here is **Domain-Driven Design (DDD) at the tactical level** — aggregates, value objects, repository interfaces in the domain, use cases in application, Postgres implementations in infrastructure — combined with **Go community layout conventions** (`cmd/`, `internal/`, `test/`, `scripts/`, thin `main.go`). Not Clean Architecture ceremony for its own sake. Not an enterprise framework. Just enough structure that a new teammate can open `internal/domain/product/` and understand where business rules live.
 
 DDD is chosen because it maps naturally to how Laravel developers already think — **models with behavior**, policies, domain events, repositories — while respecting Go's preference for **explicit packages over magic**. Your `Product` aggregate enforces invariants in code, not in a global `Service` class. Your repository interface lives next to the aggregate it serves, not in a generic `repositories/` junk drawer. That is DDD adapted to Go, not DDD copied from Java.
 
@@ -94,7 +94,7 @@ cd ws
 **Option B — copy into an existing folder**
 
 ```bash
-cp -r project-layout/ ../ws/
+cp -r go-starter-kit/ ../ws/
 cd ../ws
 ```
 
@@ -188,7 +188,7 @@ curl http://localhost:8080/api/v1/products
 
 Expected: health returns `{"data":{"status":"ok"}}`; products returns the seeded list.
 
-### 9. Swagger UI (development)
+### 8. Swagger UI (development)
 
 When `APP_ENV=development`, open:
 
@@ -204,11 +204,42 @@ make swagger
 
 Generated files live in `docs/` (`docs.go`, `swagger.json`, `swagger.yaml`). Commit them so `go build` works without installing the `swag` CLI.
 
-### 10. Run tests
+### 9. Run tests
 
 ```bash
-make test
+make test                  # unit tests (no Docker)
+make test-integration      # Postgres via Testcontainers (requires Docker)
 ```
+
+Unit tests run colocated with source (`internal/domain/product/product_test.go`). Integration tests use [Testcontainers for Go](https://golang.testcontainers.org/) under `test/` — see [Testing](#testing).
+
+---
+
+## Production deployment (VPS)
+
+For a **single VPS** workflow — push to `main`, SSH to the server, deploy — use `scripts/`:
+
+```bash
+cd /opt/ws
+./scripts/deploy.sh    # git pull → build → migrate → restart systemd
+```
+
+Or build only:
+
+```bash
+./scripts/build.sh     # git pull origin/main → bin/api + bin/migrate
+```
+
+| Tool | When |
+|---|---|
+| `make …` | Local development on your laptop |
+| `scripts/build.sh` | Server: pull latest `main` and compile binaries |
+| `scripts/deploy.sh` | Server: full release (build + migrate + restart) |
+| `deployments/` | Docker image and compose for containerized deploy |
+
+Production secrets live in `/etc/ws/ws.env` on the server — not in the repo `.env`. Full setup (systemd, first deploy, env vars): [`scripts/README.md`](scripts/README.md).
+
+This mirrors [golang-standards/project-layout `/scripts`](https://github.com/golang-standards/project-layout#scripts) and patterns from [Terraform](https://github.com/hashicorp/terraform/tree/main/scripts), [Helm](https://github.com/kubernetes/helm/tree/master/scripts), and [CockroachDB](https://github.com/cockroachdb/cockroach/tree/master/scripts): **Makefile for dev, scripts for ops.**
 
 ---
 
@@ -217,8 +248,12 @@ make test
 | Task | Command |
 |---|---|
 | Start API | `make run-api` |
-| Run tests | `make test` |
-| Build binary | `make build` |
+| Unit tests | `make test` |
+| Integration tests (Testcontainers) | `make test-integration` |
+| All tests | `make test-all` |
+| Build binary (local) | `make build` |
+| Deploy on VPS | `./scripts/deploy.sh` |
+| Pull + build on VPS | `./scripts/build.sh` |
 | Migrate up | `make migrate-up` |
 | Migrate down (one step) | `make migrate-down` |
 | Migration status | `make migrate-status` |
@@ -237,21 +272,77 @@ Migration files are created under `internal/database/migrations/`.
 ## Project layout
 
 ```
-cmd/           api, migrate, seed entrypoints
+cmd/              api, migrate, seed entrypoints
 internal/
-  domain/      aggregates, value objects, repository interfaces
-  application/ use cases
-  infrastructure/postgres/  repository implementations
-  transport/http/           handlers, middleware, router
-  database/    connection, migrations, seeders
-  config/      env loading
-api/           OpenAPI contract for core + site (hand-maintained)
-configs/       committed config templates (e.g. seeder.yaml)
-deployments/   Docker, compose
-docs/          swag-generated Swagger + architecture notes
+  domain/         aggregates, value objects, repository interfaces
+  application/    use cases
+  infrastructure/postgres/   repository implementations
+  transport/http/            handlers, middleware, router
+  database/     connection, migrations, seeders
+  config/       env loading
+api/              OpenAPI contract for core + site (hand-maintained)
+configs/          committed config templates (e.g. seeder.yaml)
+deployments/      Dockerfile, docker-compose
+scripts/          VPS production ops: build.sh, deploy.sh (see scripts/README.md)
+test/             Testcontainers integration tests (see test/README.md)
+docs/             swag-generated Swagger + architecture notes
 ```
 
 Full rationale: [`docs/solution.md`](docs/solution.md)
+
+---
+
+## Testing
+
+This starter uses a **three-tier** testing model. Unit tests and integration tests are intentionally separated.
+
+### Unit tests (colocated, no Docker)
+
+Place `*_test.go` files next to the code they test. The starter includes examples in `internal/domain/product/`.
+
+```bash
+make test
+go test ./internal/domain/product/... -v
+```
+
+Domain logic — aggregates, value objects, use cases with mocked repos — belongs here. Fast, no external dependencies.
+
+### Integration tests (`test/` + Testcontainers)
+
+Use [Testcontainers for Go](https://golang.testcontainers.org/) for tests that need **real Postgres**: repository implementations, SQL constraints, goose migrations.
+
+```
+test/
+├── integration/
+│   └── helpers/
+│       └── postgres.go    # SetupPostgres() — disposable DB + migrations
+└── e2e/                   # HTTP smoke tests (add later)
+```
+
+```bash
+make test-integration    # go test -race -tags=integration ./test/integration/...
+```
+
+**Prerequisites:** Docker running locally. Integration files use `//go:build integration` so they are excluded from `make test`.
+
+The helper `test/integration/helpers/postgres.go` starts `postgres:16-alpine`, runs goose migrations from `internal/database/migrations/`, and returns `*sql.DB`. Write repository tests against that — not against your dev `docker-compose` database.
+
+Full guide: [`test/README.md`](test/README.md)
+
+### Laravel mapping
+
+| Laravel | Go (this starter) |
+|---|---|
+| `tests/Unit` | colocated `*_test.go` in `internal/` |
+| `tests/Feature` (database) | `test/integration/` with Testcontainers |
+| `RefreshDatabase` | fresh container + migrations per test |
+
+### CI recommendation
+
+| Job | Command |
+|---|---|
+| Unit (every push) | `go test -race ./...` |
+| Integration (Docker runner) | `go test -race -tags=integration -timeout=5m ./test/integration/...` |
 
 ---
 
@@ -268,6 +359,10 @@ Full rationale: [`docs/solution.md`](docs/solution.md)
 | `app/Models` (rich) | `internal/domain/{aggregate}/` |
 | `app/Services` | `internal/application/{aggregate}/` |
 | `database/migrations` | `internal/database/migrations/` |
+| `tests/Unit` | colocated `*_test.go` in `internal/` |
+| `tests/Feature` (DB) | `test/integration/` with Testcontainers |
+| Forge “Deploy Now” | `./scripts/deploy.sh` on VPS |
+| `php artisan migrate --force` | `bin/migrate up` (in deploy.sh) |
 
 ---
 
@@ -276,6 +371,8 @@ Full rationale: [`docs/solution.md`](docs/solution.md)
 - **No `pkg/`** unless you publish a Go library other teams import.
 - **No frontends in ws** — use **core** and **site** repos.
 - **Package by domain**, not by type (`product/`, not `handlers/`).
+- **Unit tests colocated**; **integration tests in `test/`** with Testcontainers.
+- **`make` for local dev**; **`scripts/` for VPS deploy** after merge to `main`.
 - Run commands from the **repo root** (where `go.mod` lives).
 
 ---
@@ -308,5 +405,7 @@ Full rationale: [`docs/solution.md`](docs/solution.md)
 ### Project docs
 
 - [docs/solution.md](docs/solution.md) — structure decisions
+- [docs/architecture.md](docs/architecture.md) — layer overview
+- [scripts/README.md](scripts/README.md) — VPS deploy workflow
 - [docs/medium.md](docs/medium.md) — layered intro
 - [Organizing a Go module](https://go.dev/doc/modules/layout) — official Go guidance

@@ -1,6 +1,6 @@
 # Go Project Structure for Laravel Developers (Multi-Repo + DDD)
 
-A balanced layout recommendation that merges [golang-standards/project-layout](../README.md) with the practical patterns from [medium.md](../medium.md), adapted for a **multi-repository** product split and **Domain-Driven Design** in idiomatic Go.
+A balanced layout recommendation that merges [golang-standards/project-layout](https://github.com/golang-standards/project-layout) with practical layered patterns, adapted for a **multi-repository** product split and **Domain-Driven Design** in idiomatic Go.
 
 ---
 
@@ -10,17 +10,17 @@ A balanced layout recommendation that merges [golang-standards/project-layout](.
 |---|---|---|
 | **ws** | Backend API (Go) | REST/JSON API, auth, business rules, database |
 | **core** | Operations frontend | Admin panel, internal dashboards |
-| **site** | Public frontend | Marketing/public site (e.g. https://www.pdic.gov.ph/) |
+| **site** | Public frontend | Marketing/public site |
 
 Each repo is independent. Only **ws** is Go. **core** and **site** consume ws over HTTP — the same way a Laravel API serves a Vue/React SPA or a separate Next.js site.
 
-This document focuses on **ws** (backend) structure and how **project-layout/** should be redesigned as a template for that repo.
+This document focuses on **ws** (backend) structure and how this starter template should be used.
 
 ---
 
 ## Review: Two Sources, Both Sides
 
-### golang-standards/project-layout (README)
+### golang-standards/project-layout
 
 **What to adopt**
 
@@ -32,6 +32,8 @@ This document focuses on **ws** (backend) structure and how **project-layout/** 
 | `deployments/` | Docker, compose, K8s — keeps infra out of application code |
 | `api/` | OpenAPI/JSON schema contracts shared with core and site teams |
 | `docs/` | Architecture decisions, onboarding — not godoc |
+| `scripts/` | VPS/production ops: pull, build, migrate, restart — keeps Makefile dev-focused |
+| `test/` | Integration/E2E via [Testcontainers for Go](https://golang.testcontainers.org/) — **not** unit tests |
 | "Clone and delete what you don't need" | Start minimal; grow deliberately |
 
 **What to avoid or defer**
@@ -49,7 +51,7 @@ This document focuses on **ws** (backend) structure and how **project-layout/** 
 
 ---
 
-### Medium Article (go-level-structure)
+### Layered service patterns (medium-style tutorials)
 
 **What to adopt**
 
@@ -58,58 +60,20 @@ This document focuses on **ws** (backend) structure and how **project-layout/** 
 | Layered flow: transport → application → persistence | Familiar to Laravel developers (Controller → Service → Model/Repository) |
 | `cmd/api`, `cmd/migrate`, `cmd/seed` | Maps cleanly to `artisan serve`, `artisan migrate`, `artisan db:seed` |
 | Makefile targets | `make run-api`, `make migrate-up`, `make seed` — excellent DX for teams new to Go |
-| Scale path: package-by-feature (`internal/users/`, `internal/products/`) | Aligns with Go's "package by responsibility" principle |
+| Scale path: package-by-feature (`internal/domain/product/`, `internal/domain/order/`) | Aligns with Go's "package by responsibility" principle |
 
 **What to avoid or defer**
 
 | Pattern | Why |
 |---|---|
-| Global `internal/handlers/`, `internal/services/`, `internal/store/` | Works for tutorials; becomes a "junk drawer" at 10+ domains. Files grow, imports tangle, boundaries blur |
+| Global `internal/handlers/`, `internal/services/`, `internal/store/` | Works for tutorials; becomes a "junk drawer" at 10+ domains |
 | `internal/models/` | Anemic structs with JSON tags are not domain models. Collides with DDD where the model has behavior |
 | `internal/dto/` as a top-level package | DTOs belong at the transport boundary (HTTP request/response shapes), not as a parallel domain layer |
 | `pkg/utils`, `pkg/response`, `pkg/middleware` for everything | Generic `utils` packages become dependency magnets. Prefer small, purpose-named internal packages |
 | Full Hexagonal `ports/` + `adapters/` + `bootstrap/` on day one | Correct for large systems; heavy for a team still learning Go. Introduce when a second transport (gRPC, CLI) or second persistence backend appears |
 | `.env` committed to repo | Use `.env.example` only; real secrets stay local or in a secret manager |
 
-**Core philosophy alignment:** The article's best scaling advice is at the end — **package by domain** (`users/`, `products/`) — not its initial type-based layout. Lead with that for DDD.
-
----
-
-## Review: Current `golang-monorepo/ws`
-
-The existing ws implementation is a solid **layered service** — a good Laravel stepping stone — but not yet **tactical DDD**.
-
-### What ws does well (keep)
-
-```
-ws/
-├── cmd/api/main.go          # Thin entry — wires config, DB, router
-├── cmd/migrate/main.go      # goose migrations, Laravel-like commands (up/down/fresh/rollback)
-├── cmd/seed/main.go         # Ordered seeder runner
-├── cmd/keygen/main.go       # App key generation (Laravel APP_KEY equivalent)
-├── internal/database/
-│   ├── migrations/          # Timestamped SQL files
-│   └── seeders/             # Interface-based seeders + SQL seed files
-├── configs/seeder.yaml      # Seeder configuration
-├── deployments/             # docker-compose, Dockerfile
-├── Makefile                 # migrate-up, migrate-fresh-seed, seed, run-api
-└── .env.example
-```
-
-- Migration/seeder workflow is production-ready and familiar to Laravel developers.
-- `cmd/` binaries are correctly separated.
-- `deployments/` and `configs/` follow project-layout conventions.
-
-### What to evolve (DDD + Go idioms)
-
-| Current | Issue | Target |
-|---|---|---|
-| `internal/domain/product.go` — public struct fields + JSON tags | Anemic data holder; domain leaks HTTP serialization concerns | Aggregate package with unexported fields, behavior methods, no JSON tags |
-| `internal/repository/` — one package, concrete structs | Repository interfaces live far from the aggregate; hard to mock per domain | `Repository` interface in `internal/domain/product/`; Postgres impl in `internal/infrastructure/postgres/` |
-| `internal/service/` — depends on concrete `*repository.X` | Violates "accept interfaces, return structs"; hard to test | `internal/application/product/` use cases depend on domain interfaces |
-| `internal/handler/routes.go` — 150-line god wiring file | All DI in one place will not scale | `internal/transport/http/router.go` + per-module registration; optional `internal/bootstrap/wire.go` |
-| `internal/middleware/`, `internal/auth/` | Fine, but auth is infrastructure | Move to `internal/infrastructure/auth/` or `internal/transport/http/middleware/` |
-| Module path `golang-monorepo` | Misleading for a multi-repo world | `github.com/yourorg/ws` — one module per repo |
+**Core philosophy alignment:** The best scaling advice is **package by domain** (`product/`, `order/`) — not type-based layout. Lead with that for DDD.
 
 ---
 
@@ -122,8 +86,10 @@ ws/
 3. **Dependencies point inward.** `domain` → zero imports from application/infrastructure/transport.
 4. **Interfaces where they are used.** Repository interfaces live in the domain aggregate package; Postgres implements them in infrastructure.
 5. **Thin `cmd/`.** Only `main()` and fatal error handling.
-6. **Start simple, grow layers.** Begin with domain + application + one infrastructure adapter. Add hexagonal folders when a second adapter appears.
-7. **No `/src`.** Ever.
+6. **Two-tier testing.** Unit tests colocated; integration tests in `test/` with Testcontainers.
+7. **Makefile for dev, scripts for prod.** `make` on laptop; `scripts/deploy.sh` on VPS after merge to `main`.
+8. **Start simple, grow layers.** Begin with domain + application + one infrastructure adapter. Add hexagonal folders when a second adapter appears.
+9. **No `/src`.** Ever.
 
 ### ws — backend repository
 
@@ -141,92 +107,83 @@ ws/
 │   ├── domain/                     # ← Laravel "domain" (not Eloquent models)
 │   │   ├── product/
 │   │   │   ├── product.go          # aggregate root, behavior, invariants
-│   │   │   ├── repository.go       # interface (port) — Find, Save, List
+│   │   │   ├── product_test.go     # unit tests (colocated)
 │   │   │   └── errors.go           # ErrNotFound, ErrInvalidPrice, etc.
 │   │   ├── order/
 │   │   │   ├── order.go
-│   │   │   ├── item.go             # child entity (not an aggregate root)
+│   │   │   ├── item.go
 │   │   │   ├── repository.go
-│   │   │   └── events.go           # OrderPlaced, OrderCancelled
+│   │   │   └── events.go
 │   │   ├── user/
 │   │   └── shared/
 │   │       ├── money.go            # value object
-│   │       ├── pagination.go
-│   │       └── errors.go
+│   │       └── pagination.go
 │   │
 │   ├── application/                # ← Laravel "Services" / Actions / Commands
 │   │   ├── product/
-│   │   │   ├── create.go           # CreateProduct use case
-│   │   │   ├── list.go
-│   │   │   └── update.go
 │   │   ├── order/
-│   │   │   ├── place.go
-│   │   │   └── cancel.go
 │   │   └── auth/
-│   │       ├── register.go
-│   │       └── login.go
 │   │
 │   ├── infrastructure/             # ← Laravel "Infrastructure" (DB, cache, mail)
 │   │   ├── postgres/
 │   │   │   ├── product_repo.go     # implements domain/product.Repository
-│   │   │   ├── order_repo.go
-│   │   │   └── user_repo.go
-│   │   ├── auth/
-│   │   │   └── jwt.go
-│   │   └── crypto/
-│   │       └── encrypter.go
+│   │   │   └── order_repo.go
+│   │   └── auth/
+│   │       └── jwt.go
 │   │
 │   ├── transport/                  # ← Laravel "Http/Controllers" + "Routes"
 │   │   └── http/
-│   │       ├── router.go           # mux setup, middleware chain
+│   │       ├── router.go
 │   │       ├── middleware/
-│   │       │   ├── auth.go
-│   │       │   ├── cors.go
-│   │       │   └── logging.go
-│   │       ├── product_handler.go  # JSON bind → use case → JSON respond
-│   │       ├── order_handler.go
+│   │       ├── product_handler.go
 │   │       └── response/
 │   │           └── json.go
 │   │
 │   ├── database/                   # ← Laravel "database/migrations" + "database/seeders"
-│   │   ├── postgres.go             # connection pool
+│   │   ├── postgres.go
 │   │   ├── migrations/
-│   │   │   └── YYYYMMDD_HHMMSS_*.sql
 │   │   └── seeders/
-│   │       ├── seeder.go           # Seeder interface + RunAll
-│   │       ├── user_seeder.go
-│   │       └── sql/
 │   │
-│   ├── config/
-│   │   ├── config.go               # env loading
-│   │   └── seeder.go
-│   │
-│   └── bootstrap/                  # optional; add when wiring grows
-│       └── app.go                  # NewApp(cfg) → *http.Handler
+│   └── config/
+│       ├── config.go
+│       └── seeder.go
+│
+├── test/                           # ← Laravel "tests/Feature" (Testcontainers)
+│   ├── README.md
+│   ├── integration/
+│   │   ├── helpers/
+│   │   │   └── postgres.go         # SetupPostgres() — container + goose migrations
+│   │   └── *_test.go               # repository / use-case integration tests
+│   └── e2e/                        # HTTP smoke tests (add later)
 │
 ├── api/                            # OpenAPI spec — contract for core + site teams
 │   └── openapi.yaml
 │
-├── configs/                        # committed config templates
+├── configs/
 │   └── seeder.yaml
 │
 ├── deployments/
 │   ├── docker-compose.yml
 │   └── Dockerfile
 │
-├── docs/
-│   └── architecture.md
+├── scripts/                        # ← VPS production ops (not local dev)
+│   ├── README.md
+│   ├── build.sh                    # git pull + compile bin/api, bin/migrate
+│   ├── deploy.sh                   # build + migrate + systemd restart
+│   └── lib/
+│       └── common.sh
 │
-├── scripts/                        # only when Makefile is not enough
-│   └── ci-lint.sh
+├── docs/
+│   ├── architecture.md
+│   └── solution.md                 # this document
 │
 ├── Makefile
-├── go.mod                          # module github.com/yourorg/ws
+├── go.mod
 ├── .env.example
 └── README.md
 ```
 
-### Folders intentionally omitted from project-layout template
+### Folders intentionally omitted from this template
 
 | Folder | Reason |
 |---|---|
@@ -234,8 +191,176 @@ ws/
 | `vendor/` | use module proxy unless constrained |
 | `web/`, `website/` | frontends are separate repos (core, site) |
 | `tools/`, `third_party/`, `githooks/`, `init/`, `assets/`, `examples/` | add on demand |
-| `test/` at root | colocate `*_test.go` with packages; use `testdata/` per package |
+| `build/` | CI packaging configs — add when you outgrow scripts + compose |
 | `internal/repository/`, `internal/service/`, `internal/handler/` | type-based layers — replaced by domain/application/infrastructure/transport |
+
+---
+
+## Testing Strategy (Testcontainers)
+
+### Why `test/` exists
+
+Root `test/` is the home for **integration and E2E tests** that need real infrastructure. Unit tests stay colocated in `internal/` — that is non-negotiable Go convention.
+
+This starter wires integration tests to [Testcontainers for Go](https://golang.testcontainers.org/): programmatic Docker containers that start before tests, apply migrations, and are destroyed on cleanup. No shared dev database. No mocks for SQL behavior.
+
+### Three tiers
+
+| Tier | Location | Command | Docker |
+|---|---|---|---|
+| Unit | `internal/**/**/*_test.go` | `make test` | No |
+| Integration | `test/integration/` | `make test-integration` | Yes |
+| E2E | `test/e2e/` | add `make test-e2e` later | Depends |
+
+### Why Testcontainers over docker-compose for tests?
+
+| Approach | Problem |
+|---|---|
+| Point tests at `deployments/docker-compose.yml` | Shared state, flaky tests, dev data pollution |
+| Mock `*sql.DB` | Misses constraints, migrations, SQL dialect issues |
+| **Testcontainers** | Isolated Postgres per test run, same goose migrations as prod, automatic cleanup |
+
+Dependencies (in `go.mod`):
+
+```bash
+go get github.com/testcontainers/testcontainers-go
+go get github.com/testcontainers/testcontainers-go/modules/postgres
+```
+
+### Starter helper: `test/integration/helpers/postgres.go`
+
+```go
+//go:build integration
+
+func SetupPostgres(t *testing.T) *sql.DB
+```
+
+1. Starts `postgres:16-alpine` via `testcontainers-go/modules/postgres`
+2. Waits with `BasicWaitStrategies()`
+3. Opens `database/sql` with `pgx` driver
+4. Runs goose migrations from `internal/database/migrations/`
+5. Cleans up via `testcontainers.CleanupContainer(t, ctr)` and `t.Cleanup`
+
+### Build tags
+
+All integration code uses `//go:build integration`. Without `-tags=integration`, Go excludes these files — `make test` never touches Docker.
+
+```bash
+make test                                    # unit only
+make test-integration                        # Testcontainers
+go test -race -tags=integration -timeout=5m ./test/integration/... -v
+```
+
+### What goes where
+
+| Test this | Location | Why |
+|---|---|---|
+| Aggregate `Reserve()`, value objects | `internal/domain/product/product_test.go` | Pure logic, no DB |
+| `ProductRepository.Save` SQL | `test/integration/product_repo_test.go` | Real Postgres + migrations |
+| `GET /api/v1/products` | `test/e2e/` (later) | Full HTTP stack |
+
+### Laravel mapping
+
+| Laravel | Go (this starter) |
+|---|---|
+| `tests/Unit` | colocated `*_test.go` |
+| `tests/Feature` + `RefreshDatabase` | `test/integration/` + Testcontainers fresh DB |
+| PHPUnit `DatabaseMigrations` | goose migrations in `SetupPostgres` |
+
+### CI
+
+Run integration tests in a **separate job** on a Docker-enabled runner:
+
+```yaml
+# GitHub Actions example
+integration-test:
+  runs-on: ubuntu-latest
+  steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-go@v5
+    - run: go test -race -tags=integration -timeout=5m ./test/integration/...
+```
+
+See [Testcontainers CI requirements](https://golang.testcontainers.org/system_requirements/ci/).
+
+### Performance
+
+- **Per-test container** (`SetupPostgres(t)`) — maximum isolation, good for starters
+- **Shared container via `TestMain`** — faster for large suites; see `.cursor/skills/golang-testcontainers/`
+
+---
+
+## Production Deployment (`scripts/`)
+
+### Why include `scripts/` in a starter kit?
+
+Earlier drafts deferred `scripts/` (“add when Makefile is not enough”). For a **production-oriented** template aimed at VPS deploys, that was too conservative.
+
+[golang-standards/project-layout `/scripts`](https://github.com/golang-standards/project-layout#scripts) exists for build, install, and release operations that would bloat the Makefile. Large projects use the same split:
+
+| Project | `scripts/` role |
+|---|---|
+| [HashiCorp Terraform](https://github.com/hashicorp/terraform/tree/main/scripts) | Release, packaging, codegen helpers |
+| [Kubernetes Helm](https://github.com/kubernetes/helm/tree/master/scripts) | Build, test, and publish automation |
+| [CockroachDB](https://github.com/cockroachdb/cockroach/tree/master/scripts) | CI, release, and cluster tooling |
+
+Your stated workflow — **push to `main`, SSH to VPS, run one command** — is exactly what `scripts/` is for.
+
+### Makefile vs scripts vs deployments
+
+| Layer | Purpose | Example |
+|---|---|---|
+| **`Makefile`** | Developer ergonomics on a laptop | `make run-api`, `make test`, `make migrate-up` |
+| **`scripts/`** | Repeatable production operations on a server | `./scripts/build.sh`, `./scripts/deploy.sh` |
+| **`deployments/`** | Container images and compose for Docker-based deploy | `Dockerfile`, `docker-compose.yml` |
+
+**Do not** put VPS deploy logic in the Makefile. Production servers run bash scripts that are explicit, log-friendly, and safe to run over SSH.
+
+### Starter scripts
+
+| Script | What it does |
+|---|---|
+| `scripts/build.sh` | `git pull origin/main` (optional) → `CGO_ENABLED=0 go build` → `bin/api`, `bin/migrate` |
+| `scripts/deploy.sh` | `build.sh` → `bin/migrate up` → `systemctl restart` (if `SYSTEMD_SERVICE` set) |
+| `scripts/lib/common.sh` | Shared `log`, `require_env`, `die` |
+
+### VPS release flow
+
+```bash
+# On the server (after chmod +x scripts/*.sh)
+cd /opt/ws
+./scripts/deploy.sh
+```
+
+Production env at `/etc/ws/ws.env` (not committed):
+
+```bash
+APP_ENV=production
+DATABASE_URL=postgres://...
+HTTP_PORT=8080
+SYSTEMD_SERVICE=ws-api
+```
+
+### Laravel / Forge mapping
+
+| Laravel / Forge | Go starter |
+|---|---|
+| Forge “Deploy Now” | `./scripts/deploy.sh` |
+| `git pull` on server | built into `build.sh` |
+| `php artisan migrate --force` | `bin/migrate up` in `deploy.sh` |
+| `.env` on server | `/etc/ws/ws.env` |
+| Supervisor restart | `SYSTEMD_SERVICE=ws-api` |
+
+### Trade-off (stated honestly)
+
+| Approach | When |
+|---|---|
+| **`scripts/deploy.sh` on VPS** | Single server, small team — **this starter** |
+| **Docker on VPS** | Immutable images — use `deployments/Dockerfile` |
+| **GitHub Actions → SSH** | Automate `deploy.sh` |
+| **Kubernetes / PaaS** | Outgrow on-server builds; ship CI-built artifacts |
+
+Scripts build **on the server** (Go required) and are **not zero-downtime**. That matches Forge-style deploys and is fine until you need blue/green or container orchestration.
 
 ---
 
@@ -248,18 +373,18 @@ ws/
 | `app/Http/Middleware/*` | `internal/transport/http/middleware/` | Auth, CORS, logging |
 | `app/Models/*` (behavior-rich) | `internal/domain/{aggregate}/` | Aggregates with methods, not Eloquent |
 | `app/Services/*` | `internal/application/{aggregate}/` | One file per use case is fine |
-| `app/Repositories/*` or Eloquent | `internal/domain/{aggregate}/repository.go` (interface) + `internal/infrastructure/postgres/` (impl) | Interface in domain, impl in infra |
-| `database/migrations/` | `internal/database/migrations/` | Keep existing goose setup |
-| `database/seeders/` | `internal/database/seeders/` | Keep existing seeder interface |
-| `config/*.php` | `internal/config/` + `configs/` templates | Runtime load vs committed defaults |
-| `.env` | `.env.example` + `internal/config` | Never commit secrets |
-| `artisan migrate` | `make migrate-up` / `go run ./cmd/migrate up` | |
-| `artisan db:seed` | `make seed` / `go run ./cmd/seed` | |
-| `artisan migrate:fresh --seed` | `make migrate-fresh-seed` | Already implemented in ws |
-| `php artisan key:generate` | `make key-generate` / `go run ./cmd/keygen` | |
-| Form Requests / API Resources | Request structs in handler file or `transport/http/dto/` per module | Not a global `dto/` package |
-| Events / Listeners | `internal/domain/{aggregate}/events.go` + application publisher | Domain events are immutable structs |
-| Policies / Gates | `internal/domain/shared/permission.go` + middleware | RBAC rules in domain; enforcement in middleware |
+| `app/Repositories/*` or Eloquent | `internal/domain/{aggregate}/` (interface) + `internal/infrastructure/postgres/` (impl) | Interface in domain, impl in infra |
+| `database/migrations/` | `internal/database/migrations/` | goose SQL files |
+| `database/seeders/` | `internal/database/seeders/` | interface + ordered runner |
+| `config/*.php` | `internal/config/` + `configs/` templates | runtime load vs committed defaults |
+| `.env` | `.env.example` + `internal/config` | never commit secrets |
+| `artisan migrate` | `make migrate-up` | |
+| `artisan db:seed` | `make seed` | |
+| `artisan migrate:fresh --seed` | `make migrate-fresh-seed` | |
+| `tests/Unit` | `internal/**/**/*_test.go` | colocated with source |
+| `tests/Feature` (DB) | `test/integration/` | Testcontainers + goose migrations |
+| Forge “Deploy Now” | `scripts/deploy.sh` | VPS: pull, build, migrate, restart |
+| Server `.env` | `/etc/ws/ws.env` | production secrets outside repo |
 
 ---
 
@@ -270,9 +395,8 @@ These are **not** Go projects. They do not use this layout.
 ```
 core/                          # admin / operations SPA
 ├── src/
-│   ├── api/                   # typed client generated from ws/api/openapi.yaml
-│   ├── features/              # feature folders (products, orders, users)
-│   └── ...
+│   ├── api/                   # typed client from ws/api/openapi.yaml
+│   └── features/
 ├── package.json
 └── .env.example               # VITE_API_URL=https://ws.example.com
 
@@ -282,7 +406,7 @@ site/                          # public marketing site
 └── .env.example               # NEXT_PUBLIC_API_URL=...
 ```
 
-**Contract between repos:** ws publishes `api/openapi.yaml` (or hosts `/openapi.json`). core and site generate clients from it. No shared Go packages across repos — only HTTP contracts.
+**Contract between repos:** ws publishes `api/openapi.yaml`. core and site generate clients from it. No shared Go packages across repos — only HTTP contracts.
 
 ---
 
@@ -321,12 +445,11 @@ site/                          # public marketing site
 
 ---
 
-## Code Sketch: Domain vs Current ws
+## Code Sketch: Domain Aggregate
 
-**Current (anemic — ws today):**
+**Anemic (avoid):**
 
 ```go
-// internal/domain/product.go
 type Product struct {
     ID    string `json:"id"`
     Name  string `json:"name"`
@@ -335,29 +458,22 @@ type Product struct {
 }
 ```
 
-**Target (DDD aggregate — recommended):**
+**DDD aggregate (this starter):**
 
 ```go
 // internal/domain/product/product.go
-package product
-
 type Product struct {
     id    string
     name  string
-    price Money
+    price shared.Money
     stock int
 }
 
-func New(name string, price Money, stock int) (*Product, error) {
+func New(name, slug string, price shared.Money, stock int) (*Product, error) {
     if stock < 0 {
         return nil, ErrInvalidStock
     }
-    return &Product{
-        id:    uuid.New().String(),
-        name:  name,
-        price: price,
-        stock: stock,
-    }, nil
+    // ...
 }
 
 func (p *Product) Reserve(qty int) error {
@@ -367,152 +483,84 @@ func (p *Product) Reserve(qty int) error {
     p.stock -= qty
     return nil
 }
-
-func (p *Product) ID() string   { return p.id }
-func (p *Product) Name() string { return p.name }
 ```
 
 ```go
-// internal/domain/product/repository.go
-package product
-
-type Repository interface {
-    Find(ctx context.Context, id string) (*Product, error)
-    Save(ctx context.Context, p *Product) error
-    List(ctx context.Context, filter ListFilter) ([]*Product, error)
-}
-```
-
-```go
-// internal/infrastructure/postgres/product_repo.go
-package postgres
-
-type ProductRepo struct { db *sql.DB }
-
-func (r *ProductRepo) Find(ctx context.Context, id string) (*product.Product, error) {
-    // SQL → Reconstruct(id, name, price, stock) — bypasses New() validation
-}
+// internal/domain/product/product_test.go — colocated unit test
+func TestReserve_InsufficientStock(t *testing.T) { /* ... */ }
 ```
 
 JSON serialization stays in `transport/http/product_handler.go` — not in domain structs.
 
 ---
 
-## Migration Path from Current ws
+## Migration Path When Forking This Template
 
-Do this incrementally. Do not rewrite everything at once.
+### Phase 1 — Rename and configure
 
-### Phase 1 — Rename layers (low risk)
+1. Change `go.mod` module path to `github.com/yourorg/ws`.
+2. Update imports across the repo.
+3. Copy `.env.example` → `.env`, run `make docker-db-up`, `make migrate-fresh-seed`, `make run-api`.
 
-| From | To |
-|---|---|
-| `internal/handler/` | `internal/transport/http/` |
-| `internal/service/` | `internal/application/` (split into per-aggregate subpackages over time) |
-| `internal/repository/` | `internal/infrastructure/postgres/` |
-| Keep `internal/database/` | No change — migrations/seeders are already correct |
+### Phase 2 — Grow domain
 
-### Phase 2 — Enrich domain (medium risk)
+1. Add aggregates under `internal/domain/{name}/` with behavior and colocated tests.
+2. Add use cases under `internal/application/{name}/`.
+3. Add Postgres repos under `internal/infrastructure/postgres/`.
 
-1. Pick one aggregate (e.g. `order` — it has real business rules: status transitions, prestige, cart).
-2. Create `internal/domain/order/` with behavior methods.
-3. Move `Repository` interface into that package.
-4. Update application use case to depend on `order.Repository` interface, not `*postgres.OrderRepo`.
+### Phase 3 — Add integration tests (Testcontainers)
 
-### Phase 3 — Extract use cases (medium risk)
+1. Create `test/integration/product_repo_test.go` with `//go:build integration`.
+2. Use `helpers.SetupPostgres(t)` — already provided in `test/integration/helpers/postgres.go`.
+3. Run with `make test-integration` (requires Docker).
 
-Split `internal/application/order/order_service.go` into:
+Example:
 
-```
-application/order/
-├── place.go
-├── cancel.go
-├── confirm_payment.go
-└── list_admin.go
+```go
+//go:build integration
+
+package integration_test
+
+import (
+    "context"
+    "testing"
+
+    "github.com/stretchr/testify/require"
+    "github.com/yourorg/ws/internal/domain/product"
+    "github.com/yourorg/ws/internal/domain/shared"
+    "github.com/yourorg/ws/internal/infrastructure/postgres"
+    "github.com/yourorg/ws/test/integration/helpers"
+)
+
+func TestProductRepository_SaveAndFindBySlug(t *testing.T) {
+    db := helpers.SetupPostgres(t)
+    repo := postgres.NewProductRepository(db)
+    ctx := context.Background()
+
+    price, err := shared.NewMoney("19.99", "PHP")
+    require.NoError(t, err)
+
+    p, err := product.New("Kit", "starter-kit", "desc", price, 10)
+    require.NoError(t, err)
+    require.NoError(t, repo.Save(ctx, p))
+
+    found, err := repo.FindBySlug(ctx, "starter-kit")
+    require.NoError(t, err)
+    require.Equal(t, p.ID(), found.ID())
+}
 ```
 
 ### Phase 4 — Contract with frontends
 
-1. Add `api/openapi.yaml` describing endpoints ws already exposes.
+1. Keep `api/openapi.yaml` in sync with handlers.
 2. core and site generate TypeScript clients from it.
 
-### Phase 5 — Module rename
+### Phase 5 — Production VPS
 
-Change `go.mod` from `golang-monorepo` to `github.com/yourorg/ws` when the repo is split.
-
----
-
-## project-layout Template Redesign
-
-The `project-layout/` repo should become a **ws backend starter** — not a copy of every folder from golang-standards/project-layout.
-
-### Keep in template
-
-```
-project-layout/
-├── cmd/
-│   ├── api/
-│   ├── migrate/
-│   └── seed/
-├── internal/
-│   ├── domain/
-│   │   └── example/            # sample aggregate with README
-│   ├── application/
-│   │   └── example/
-│   ├── infrastructure/
-│   │   └── postgres/
-│   ├── transport/
-│   │   └── http/
-│   ├── database/
-│   │   ├── migrations/
-│   │   └── seeders/
-│   └── config/
-├── api/
-│   └── openapi.yaml
-├── configs/
-├── deployments/
-├── docs/
-│   └── solution.md             # this document
-├── Makefile
-├── go.mod
-└── .env.example
-```
-
-### Remove or demote to docs-only mention
-
-- `pkg/`, `vendor/`, `web/`, `website/`, `tools/`, `third_party/`, `githooks/`, `init/`, `assets/`, `examples/`, `build/`, `scripts/` (until needed), `test/` at root
-
-### Add to template README
-
-1. Link to this `solution.md`.
-2. Laravel mapping table (abbreviated).
-3. Note that **core** and **site** are separate repos.
-4. Explicit warning: "Do not add `pkg/` unless you publish a Go library."
-
----
-
-## Makefile (retain ws patterns)
-
-```makefile
-DATABASE_URL ?= postgres://postgres:root@localhost:5433/app?sslmode=disable
-
-.PHONY: run-api migrate-up migrate-down migrate-fresh migrate-fresh-seed seed
-
-run-api:
-	go run ./cmd/api
-
-migrate-up:
-	DATABASE_URL="$(DATABASE_URL)" go run ./cmd/migrate up
-
-migrate-fresh-seed: migrate-fresh seed
-
-migrate-fresh:
-	DATABASE_URL="$(DATABASE_URL)" go run ./cmd/migrate fresh
-
-seed:
-	go run ./cmd/seed
-```
-
-This preserves the Laravel muscle memory your team already built in ws.
+1. Clone repo to `/opt/ws` on the server.
+2. Create `/etc/ws/ws.env` with `DATABASE_URL` and `APP_ENV=production`.
+3. Add systemd unit for `bin/api` (see `scripts/README.md`).
+4. `chmod +x scripts/*.sh` and run `./scripts/deploy.sh` on every release.
 
 ---
 
@@ -520,103 +568,56 @@ This preserves the Laravel muscle memory your team already built in ws.
 
 | Question | Answer |
 |---|---|
-| project-layout or medium structure? | **Neither alone.** Skeleton from project-layout (`cmd`, `internal`, `configs`, `deployments`, `api`, `docs`). Internal organization from DDD + medium's package-by-feature scaling path |
+| project-layout or layered tutorial structure? | **Neither alone.** Skeleton from project-layout (`cmd`, `internal`, `configs`, `deployments`, `api`, `docs`, `test`). Internal organization from DDD + package-by-feature |
 | Monorepo or multi-repo? | **Multi-repo** — ws, core, site are separate. One `go.mod` per Go repo |
-| Layered or DDD? | **DDD tactical inside `internal/domain/`**, with a thin application layer. Avoid anemic `models/` |
-| `pkg/`? | **No** for ws unless you extract a shared Go SDK (unlikely) |
-| Type-based or domain-based packages? | **Domain-based** (`product/`, `order/`). Type-based only for the first tutorial sprint |
-| Where do migrations/seeders go? | **`internal/database/`** — keep the ws implementation; it maps directly to Laravel |
-| Hexagonal/Clean Architecture folders? | **Defer** `ports/`, `adapters/`, `bootstrap/` until you have 2+ inbound/outbound adapters |
+| Layered or DDD? | **DDD tactical inside `internal/domain/`**, with a thin application layer |
+| `pkg/`? | **No** for ws unless you extract a shared Go SDK |
+| Type-based or domain-based packages? | **Domain-based** (`product/`, `order/`) |
+| Where do migrations/seeders go? | **`internal/database/`** |
+| Where do unit tests go? | **Colocated** `*_test.go` in `internal/` |
+| Where do integration tests go? | **`test/integration/`** with Testcontainers |
+| Testcontainers deps? | `testcontainers-go` + `modules/postgres` in `go.mod` |
+| `scripts/` for VPS deploy? | **Yes** — `build.sh` + `deploy.sh`; Makefile stays dev-only |
+| Hexagonal/Clean Architecture folders? | **Defer** until you have 2+ inbound/outbound adapters |
 | Where do frontends go? | **Not in ws.** core and site repos consume `api/openapi.yaml` |
+
+---
+
+## Production Readiness Assessment
+
+| Criterion | Status |
+|---|---|
+| Compiles (`go build ./...`) | Yes |
+| Runnable API | `make run-api` |
+| Migrations / seeders | goose + Makefile targets |
+| DDD structure | domain → application → infrastructure → transport |
+| Unit tests | `internal/domain/product/product_test.go` |
+| Integration test helper | `test/integration/helpers/postgres.go` (Testcontainers) |
+| Integration test command | `make test-integration` |
+| VPS deploy scripts | `scripts/build.sh`, `scripts/deploy.sh` |
+| OpenAPI contract | `api/openapi.yaml` |
+| Docker / compose | `deployments/docker-compose.yml` |
+| Graceful shutdown | SIGTERM handling in `cmd/api` |
+
+A **starter** is production-ready when it gives you a working, idiomatic foundation. A **product** is production-ready when it meets your SLAs, security, and compliance requirements. This template is the former.
+
+### Next steps when forking
+
+1. Rename module path in `go.mod` and imports.
+2. Add aggregates one at a time under `internal/domain/{name}/` with colocated tests.
+3. Add `test/integration/*_test.go` using `helpers.SetupPostgres(t)`.
+4. Publish `api/openapi.yaml` for **core** and **site** teams.
+5. Configure VPS: `/etc/ws/ws.env`, systemd, `./scripts/deploy.sh`.
+6. Add CI: `go vet`, `go test -race ./...`, `go test -race -tags=integration ./test/integration/...` on Docker runners.
 
 ---
 
 ## Further Reading
 
 - [Organizing a Go module](https://go.dev/doc/modules/layout) — official guidance
-- [Effective Go — Names](https://go.dev/doc/effective_go#names)
-- [Package names (blog)](https://go.dev/blog/package-names)
-- [golang-standards/project-layout](../README.md) — community layout reference
-- [medium.md](../medium.md) — layered intro and scaling diagram
+- [Testcontainers for Go](https://golang.testcontainers.org/) — integration test containers
+- [golang-standards/project-layout](https://github.com/golang-standards/project-layout) — community layout reference (`/test`, `/scripts`)
+- [scripts/README.md](../scripts/README.md) — VPS deploy workflow
+- [docs/architecture.md](architecture.md) — layer overview
+- [docs/medium.md](medium.md) — layered intro and scaling diagram
 - DDD tactical patterns — see `.cursor/skills/golang-ddd/SKILL.md` in this repo
-
----
-
-## Production Readiness Assessment (Appendix)
-
-*Updated after removing deferred folders and implementing the starter template.*
-
-### Was `project-layout/` production-ready after folder cleanup?
-
-**No.** Deleting `pkg/`, `vendor/`, `web/`, `website/`, `tools/`, and other deferred folders was the **correct first step**, but the repo was still only a **directory skeleton** — README placeholders in `cmd/`, `internal/`, `api/`, etc., a placeholder `go.mod`, and no compilable application code. That is documentation of layout ideas, not a deployable backend.
-
-| Criterion | Before cleanup + delete | After this implementation |
-|---|---|---|
-| Compiles (`go build ./...`) | No Go source | Yes |
-| Runnable API | No | `make run-api` |
-| Migrations / seeders | No | goose + `make migrate-up` / `make seed` |
-| DDD structure | No | `domain` → `application` → `infrastructure` → `transport` |
-| Tests | No | `go test ./...` on domain layer |
-| OpenAPI contract | No | `api/openapi.yaml` |
-| Docker / compose | README only | `deployments/docker-compose.yml` |
-| Graceful shutdown | N/A | SIGTERM handling in `cmd/api` |
-| Auth / RBAC | N/A | Not in starter — add when porting from `golang-monorepo/ws` |
-
-### Verdict
-
-| State | Meaning |
-|---|---|
-| **Before** | Folder catalog only — not production-ready |
-| **Now** | **Starter production-ready** — safe to clone, rename module, run locally, and grow feature-by-feature |
-| **Not yet** | Full production system — still needs auth, CI, observability, integration tests, and your real domain aggregates |
-
-A **starter** is production-ready when it gives you a working, idiomatic foundation. A **product** is production-ready when it meets your SLAs, security, and compliance requirements. This template is the former.
-
-### What was implemented in `project-layout/`
-
-```
-project-layout/
-├── cmd/api/              # HTTP server with graceful shutdown
-├── cmd/migrate/          # goose runner (up/down/fresh/rollback/create)
-├── cmd/seed/             # YAML-driven seeder
-├── internal/
-│   ├── domain/product/   # example DDD aggregate + tests
-│   ├── domain/shared/    # Money value object
-│   ├── application/product/
-│   ├── infrastructure/postgres/
-│   ├── transport/http/
-│   ├── database/
-│   └── config/
-├── api/openapi.yaml
-├── configs/seeder.yaml
-├── deployments/
-├── docs/architecture.md
-├── Makefile
-├── go.mod
-└── .env.example
-```
-
-### Folders removed (deferred — do not re-add without need)
-
-- `pkg/`, `vendor/`, `web/`, `website/`, `tools/`, `third_party/`, `githooks/`, `init/`, `assets/`, `examples/`
-- `build/`, `scripts/`, `test/` at repo root (use Makefile + colocated `*_test.go` instead)
-
-### Next steps when forking this template
-
-1. Rename module: `github.com/yourorg/ws` → your real path in `go.mod` and imports.
-2. Copy auth/RBAC patterns from `golang-monorepo/ws` into `internal/infrastructure/auth` and middleware.
-3. Add aggregates one at a time under `internal/domain/{name}/`.
-4. Publish `api/openapi.yaml` for **core** and **site** teams to generate TypeScript clients.
-5. Add CI: `go vet`, `go test -race ./...`, `staticcheck` or `golangci-lint`.
-
-### Clone → run checklist
-
-```bash
-cp .env.example .env
-make docker-db-up
-make migrate-up
-make seed
-make run-api
-curl http://localhost:8080/up
-curl http://localhost:8080/api/v1/products
-```

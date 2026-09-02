@@ -1,12 +1,17 @@
 DATABASE_URL ?= postgres://postgres:root@127.0.0.1:5433/ws?sslmode=disable
 
-.PHONY: run-api test build swagger migrate-up migrate-down migrate-fresh migrate-fresh-seed migrate-rollback migrate-status migrate-create seed docker-db-up docker-db-down
+.PHONY: run-api test test-integration test-all build swagger migrate-up migrate-down migrate-fresh migrate-fresh-seed migrate-rollback migrate-status migrate-create seed docker-db-up docker-db-down
 
 run-api:
 	go run ./cmd/api
 
 test:
 	go test ./...
+
+test-integration:
+	go test -race -tags=integration -timeout=5m ./test/integration/...
+
+test-all: test test-integration
 
 build:
 	go build -o bin/api ./cmd/api
